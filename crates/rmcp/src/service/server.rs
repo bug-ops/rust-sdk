@@ -344,7 +344,6 @@ impl Peer<RoleServer> {
     method!(peer_req create_message CreateMessageRequest(CreateMessageRequestParam) => CreateMessageResult);
     method!(peer_req list_roots ListRootsRequest() => ListRootsResult);
     #[cfg(feature = "mcp_spec-2025-06-18")]
-    #[cfg(feature = "mcp_spec-2025-06-18")]
     method!(peer_req create_elicitation CreateElicitationRequest(CreateElicitationRequestParam) => CreateElicitationResult);
 
     method!(peer_not notify_cancelled CancelledNotification(CancelledNotificationParam));
