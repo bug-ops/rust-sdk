@@ -67,13 +67,24 @@ rmcp-macros = { version = "0.1", workspace = true, optional = true }
 chrono = { version = "0.4.38", features = ["serde"] }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
-chrono = { version = "0.4.38", default-features = false, features = ["serde", "clock", "std", "oldtime"] }
+chrono = { version = "0.4.38", default-features = false, features = [
+    "serde",
+    "clock",
+    "std",
+    "oldtime",
+] }
 
 [features]
-default = ["base64", "macros", "server"]
+default = ["base64", "macros", "server", "mcp_spec"]
 client = ["dep:tokio-stream"]
 server = ["transport-async-rw", "dep:schemars"]
 macros = ["dep:rmcp-macros", "dep:paste"]
+
+mcp_spec = ["mcp_spec-2025-03-26"]
+# MCP Spec Version 2025-03-26
+mcp_spec-2025-03-26 = []
+# MCP Spec Version 2025-06-18 - includes all previous features plus new ones
+mcp_spec-2025-06-18 = ["mcp_spec-2025-03-26"]
 
 # reqwest http client
 __reqwest = ["dep:reqwest"]

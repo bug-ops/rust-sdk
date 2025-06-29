@@ -95,9 +95,9 @@ pub trait ClientHandler: Sized + Send + Sync + 'static {
         params: CreateElicitationRequestParam,
         context: RequestContext<RoleClient>,
     ) -> impl Future<Output = Result<CreateElicitationResult, McpError>> + Send + '_ {
-        std::future::ready(Err(
-            McpError::method_not_found::<CreateElicitationRequestMethod>(),
-        ))
+        std::future::ready(Err(McpError::method_not_found::<
+            CreateElicitationRequestMethod,
+        >()))
     }
 
     fn on_cancelled(

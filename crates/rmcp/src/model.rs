@@ -142,8 +142,13 @@ impl std::fmt::Display for ProtocolVersion {
 }
 
 impl ProtocolVersion {
+    #[cfg(feature = "mcp_spec-2025-06-18")]
+    pub const V_2025_06_18: Self = Self(Cow::Borrowed("2025-06-18"));
     pub const V_2025_03_26: Self = Self(Cow::Borrowed("2025-03-26"));
     pub const V_2024_11_05: Self = Self(Cow::Borrowed("2024-11-05"));
+    #[cfg(feature = "mcp_spec-2025-06-18")]
+    pub const LATEST: Self = Self::V_2025_06_18;
+    #[cfg(not(feature = "mcp_spec-2025-06-18"))]
     pub const LATEST: Self = Self::V_2025_03_26;
 }
 
@@ -1207,7 +1212,8 @@ pub struct CreateElicitationRequestParam {
 }
 
 /// Request to create an elicitation (server to client)
-pub type CreateElicitationRequest = Request<CreateElicitationRequestMethod, CreateElicitationRequestParam>;
+pub type CreateElicitationRequest =
+    Request<CreateElicitationRequestMethod, CreateElicitationRequestParam>;
 
 /// Result of an elicitation request
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -1220,7 +1226,6 @@ pub struct CreateElicitationResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<serde_json::Value>,
 }
-
 // =============================================================================
 // TOOL EXECUTION RESULTS
 // =============================================================================

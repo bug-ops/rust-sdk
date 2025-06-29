@@ -1,13 +1,11 @@
 // cargo test --features "server client" --package rmcp test_elicitation
+#![cfg(feature = "mcp_spec-2025-06-18")]
 mod common;
 
 use std::sync::{Arc, Mutex};
 
 use common::handlers::{TestClientHandler, TestServer};
-use rmcp::{
-    ServiceExt,
-    model::{CreateElicitationRequestParam, CreateElicitationResult, ElicitationAction},
-};
+use rmcp::{ServiceExt, model::*};
 use serde_json::json;
 use tokio::sync::Notify;
 
@@ -30,7 +28,12 @@ async fn test_elicitation_spec_compliance() -> anyhow::Result<()> {
             received_requests: Arc<Mutex<Vec<CreateElicitationRequestParam>>>,
         ) -> Self {
             Self {
-                inner: TestClientHandler::with_notification(false, false, receive_signal.clone(), Arc::new(Mutex::new(Vec::new()))),
+                inner: TestClientHandler::with_notification(
+                    false,
+                    false,
+                    receive_signal.clone(),
+                    Arc::new(Mutex::new(Vec::new())),
+                ),
                 receive_signal,
                 received_requests,
             }
@@ -48,10 +51,10 @@ async fn test_elicitation_spec_compliance() -> anyhow::Result<()> {
                 let mut requests = self.received_requests.lock().unwrap();
                 requests.push(params.clone());
             }
-            
+
             // Signal that we received a request
             self.receive_signal.notify_one();
-            
+
             // Simulate user accepting the elicitation with test data
             Ok(CreateElicitationResult {
                 action: ElicitationAction::Accept,
@@ -121,7 +124,7 @@ async fn test_elicitation_spec_compliance() -> anyhow::Result<()> {
         // Verify the response
         assert_eq!(result.action, ElicitationAction::Accept);
         assert!(result.content.is_some());
-        
+
         let content = result.content.unwrap();
         assert_eq!(content["email"], "test@example.com");
         assert_eq!(content["age"], 25);
@@ -131,24 +134,26 @@ async fn test_elicitation_spec_compliance() -> anyhow::Result<()> {
         anyhow::Ok(())
     });
 
-    let client = ElicitationTestClientHandler::new(
-        receive_signal.clone(),
-        received_requests.clone(),
-    )
-    .serve(client_transport)
-    .await?;
+    let client =
+        ElicitationTestClientHandler::new(receive_signal.clone(), received_requests.clone())
+            .serve(client_transport)
+            .await?;
 
     // Wait for the elicitation request
     receive_signal.notified().await;
-    
+
     // Verify the request was received correctly
     {
         let requests = received_requests.lock().unwrap();
-        assert_eq!(requests.len(), 1, "Should receive exactly one elicitation request");
-        
+        assert_eq!(
+            requests.len(),
+            1,
+            "Should receive exactly one elicitation request"
+        );
+
         let request = &requests[0];
         assert_eq!(request.message, "Please provide your contact information");
-        
+
         // Verify the schema structure
         let schema = &request.requested_schema;
         assert!(schema["type"].as_str().unwrap() == "object");
@@ -165,11 +170,8 @@ async fn test_elicitation_spec_compliance() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test] 
+#[tokio::test]
 async fn test_elicitation_action_types() -> anyhow::Result<()> {
-    let (server_transport, client_transport) = tokio::io::duplex(4096);
-    let receive_signal = Arc::new(Notify::new());
-    
     // Test different action types
     for (action_type, expected_action) in [
         ("accept", ElicitationAction::Accept),
@@ -178,7 +180,7 @@ async fn test_elicitation_action_types() -> anyhow::Result<()> {
     ] {
         let (server_transport, client_transport) = tokio::io::duplex(4096);
         let receive_signal = Arc::new(Notify::new());
-        
+
         struct ActionTestClientHandler {
             action: ElicitationAction,
             receive_signal: Arc<Notify>,
@@ -191,7 +193,7 @@ async fn test_elicitation_action_types() -> anyhow::Result<()> {
                 _context: rmcp::service::RequestContext<rmcp::service::RoleClient>,
             ) -> Result<CreateElicitationResult, rmcp::Error> {
                 self.receive_signal.notify_one();
-                
+
                 Ok(CreateElicitationResult {
                     action: self.action.clone(),
                     content: match self.action {
@@ -226,12 +228,12 @@ async fn test_elicitation_action_types() -> anyhow::Result<()> {
                 .await?;
 
             assert_eq!(result.action, expected_action);
-            
+
             match expected_action {
                 ElicitationAction::Accept => {
                     assert!(result.content.is_some());
                     assert_eq!(result.content.unwrap()["test"], "data");
-                },
+                }
                 _ => {
                     assert!(result.content.is_none());
                 }
@@ -262,11 +264,20 @@ fn test_elicitation_serialization() {
     for (action, expected) in test_cases {
         let serialized = serde_json::to_string(&action).unwrap();
         let serialized = serialized.trim_matches('"');
-        assert_eq!(serialized, expected, "ElicitationAction::{:?} should serialize to \"{}\"", action, expected);
-        
+        assert_eq!(
+            serialized, expected,
+            "ElicitationAction::{:?} should serialize to \"{}\"",
+            action, expected
+        );
+
         // Test deserialization
-        let deserialized: ElicitationAction = serde_json::from_str(&format!("\"{}\"", expected)).unwrap();
-        assert_eq!(deserialized, action, "\"{}\" should deserialize to ElicitationAction::{:?}", expected, action);
+        let deserialized: ElicitationAction =
+            serde_json::from_str(&format!("\"{}\"", expected)).unwrap();
+        assert_eq!(
+            deserialized, action,
+            "\"{}\" should deserialize to ElicitationAction::{:?}",
+            expected, action
+        );
     }
 
     // Test CreateElicitationRequestParam serialization
@@ -302,5 +313,8 @@ fn test_elicitation_serialization() {
 
     let serialized = serde_json::to_value(&result_no_content).unwrap();
     assert_eq!(serialized["action"], "cancel");
-    assert!(serialized.get("content").is_none(), "content field should be omitted when None");
+    assert!(
+        serialized.get("content").is_none(),
+        "content field should be omitted when None"
+    );
 }
