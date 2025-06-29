@@ -1177,6 +1177,51 @@ const_string!(RootsListChangedNotificationMethod = "notifications/roots/list_cha
 pub type RootsListChangedNotification = NotificationNoParam<RootsListChangedNotificationMethod>;
 
 // =============================================================================
+// ELICITATION (MCP 2025-06-18)
+// =============================================================================
+
+/// Elicitation action types representing user responses
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum ElicitationAction {
+    /// User clicked "Submit", "OK", "Confirm", etc.
+    Accept,
+    /// User explicitly rejected the request - clicked "Reject", "Decline", "No", etc.
+    Reject,
+    /// User dismissed without making an explicit choice - closed dialog, clicked outside, pressed Escape, etc.
+    Cancel,
+}
+
+const_string!(CreateElicitationRequestMethod = "elicitation/create");
+
+/// Parameters for creating an elicitation request
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct CreateElicitationRequestParam {
+    /// User-facing description of what information is being requested
+    pub message: String,
+    /// JSON Schema defining the structure and constraints for the requested data
+    pub requested_schema: serde_json::Value,
+}
+
+/// Request to create an elicitation (server to client)
+pub type CreateElicitationRequest = Request<CreateElicitationRequestMethod, CreateElicitationRequestParam>;
+
+/// Result of an elicitation request
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct CreateElicitationResult {
+    /// The action taken by the user
+    pub action: ElicitationAction,
+    /// Optional data provided by user (only present when action is Accept)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<serde_json::Value>,
+}
+
+// =============================================================================
 // TOOL EXECUTION RESULTS
 // =============================================================================
 
@@ -1318,7 +1363,7 @@ ts_union!(
 );
 
 ts_union!(
-    export type ClientResult = CreateMessageResult | ListRootsResult | EmptyResult;
+    export type ClientResult = CreateMessageResult | ListRootsResult | CreateElicitationResult | EmptyResult;
 );
 
 impl ClientResult {
@@ -1333,7 +1378,8 @@ ts_union!(
     export type ServerRequest =
     | PingRequest
     | CreateMessageRequest
-    | ListRootsRequest;
+    | ListRootsRequest
+    | CreateElicitationRequest;
 );
 
 ts_union!(

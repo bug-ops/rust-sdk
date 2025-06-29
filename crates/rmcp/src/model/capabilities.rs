@@ -39,6 +39,11 @@ pub struct RootsCapabilities {
     pub list_changed: Option<bool>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ElicitationCapability {}
+
 ///
 /// # Builder
 /// ```rust
@@ -89,6 +94,8 @@ pub struct ServerCapabilities {
     pub resources: Option<ResourcesCapability>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<ToolsCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub elicitation: Option<ElicitationCapability>,
 }
 
 macro_rules! builder {
@@ -203,7 +210,8 @@ builder! {
         completions: JsonObject,
         prompts: PromptsCapability,
         resources: ResourcesCapability,
-        tools: ToolsCapability
+        tools: ToolsCapability,
+        elicitation: ElicitationCapability
     }
 }
 

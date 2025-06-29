@@ -5,7 +5,8 @@ use thiserror::Error;
 use super::*;
 use crate::model::{
     CancelledNotification, CancelledNotificationParam, ClientInfo, ClientJsonRpcMessage,
-    ClientNotification, ClientRequest, ClientResult, CreateMessageRequest,
+    ClientNotification, ClientRequest, ClientResult, CreateElicitationRequest,
+    CreateElicitationRequestParam, CreateElicitationResult, CreateMessageRequest,
     CreateMessageRequestParam, CreateMessageResult, ErrorData, ListRootsRequest, ListRootsResult,
     LoggingMessageNotification, LoggingMessageNotificationParam, ProgressNotification,
     ProgressNotificationParam, PromptListChangedNotification, ProtocolVersion,
@@ -317,6 +318,7 @@ macro_rules! method {
 impl Peer<RoleServer> {
     method!(peer_req create_message CreateMessageRequest(CreateMessageRequestParam) => CreateMessageResult);
     method!(peer_req list_roots ListRootsRequest() => ListRootsResult);
+    method!(peer_req create_elicitation CreateElicitationRequest(CreateElicitationRequestParam) => CreateElicitationResult);
 
     method!(peer_not notify_cancelled CancelledNotification(CancelledNotificationParam));
     method!(peer_not notify_progress ProgressNotification(ProgressNotificationParam));
