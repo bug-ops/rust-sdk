@@ -20,6 +20,7 @@ rmcp = { workspace = true, features = [
     "reqwest",
     "transport-child-process",
     "transport-sse-client",
+    "transport-streamable-http-client"
 ] }
 anyhow = "1.0"
 serde_json = "1"

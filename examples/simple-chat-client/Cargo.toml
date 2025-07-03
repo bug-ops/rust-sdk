@@ -18,6 +18,7 @@ rmcp = { workspace = true, features = [
     "client",
     "transport-child-process",
     "transport-sse-client",
+    "transport-streamable-http-client",
     "reqwest"
 ], no-default-features = true }
 clap = { version = "4.0", features = ["derive"] }
