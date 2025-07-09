@@ -3,14 +3,18 @@ use std::borrow::Cow;
 use thiserror::Error;
 
 use super::*;
-use crate::model::{
-    CancelledNotification, CancelledNotificationParam, ClientInfo, ClientJsonRpcMessage,
-    ClientNotification, ClientRequest, ClientResult, CreateMessageRequest,
-    CreateMessageRequestParam, CreateMessageResult, ErrorData, ListRootsRequest, ListRootsResult,
-    LoggingMessageNotification, LoggingMessageNotificationParam, ProgressNotification,
-    ProgressNotificationParam, PromptListChangedNotification, ProtocolVersion,
-    ResourceListChangedNotification, ResourceUpdatedNotification, ResourceUpdatedNotificationParam,
-    ServerInfo, ServerNotification, ServerRequest, ServerResult, ToolListChangedNotification,
+use crate::{
+    model::{
+        CancelledNotification, CancelledNotificationParam, ClientInfo, ClientJsonRpcMessage,
+        ClientNotification, ClientRequest, ClientResult, CreateMessageRequest,
+        CreateMessageRequestParam, CreateMessageResult, ErrorData, ListRootsRequest,
+        ListRootsResult, LoggingMessageNotification, LoggingMessageNotificationParam,
+        ProgressNotification, ProgressNotificationParam, PromptListChangedNotification,
+        ProtocolVersion, ResourceListChangedNotification, ResourceUpdatedNotification,
+        ResourceUpdatedNotificationParam, ServerInfo, ServerNotification, ServerRequest,
+        ServerResult, ToolListChangedNotification,
+    },
+    transport::DynamicTransportError,
 };
 #[cfg(feature = "mcp_spec-2025-06-18")]
 use crate::model::{
@@ -30,7 +34,7 @@ impl ServiceRole for RoleServer {
     type Info = ServerInfo;
     type PeerInfo = ClientInfo;
 
-    type InitializeError<E> = ServerInitializeError<E>;
+    type InitializeError = ServerInitializeError;
     const IS_CLIENT: bool = false;
 }
 
@@ -38,7 +42,7 @@ impl ServiceRole for RoleServer {
 ///
 /// if you want to handle the error, you can use `serve_server_with_ct` or `serve_server` with `Result<RunningService<RoleServer, S>, ServerError>`
 #[derive(Error, Debug)]
-pub enum ServerInitializeError<E> {
+pub enum ServerInitializeError {
     #[error("expect initialized request, but received: {0:?}")]
     ExpectedInitializeRequest(Option<ClientJsonRpcMessage>),
 
@@ -59,7 +63,7 @@ pub enum ServerInitializeError<E> {
 
     #[error("Send message error {error}, when {context}")]
     TransportError {
-        error: E,
+        error: DynamicTransportError,
         context: Cow<'static, str>,
     },
 
@@ -67,6 +71,17 @@ pub enum ServerInitializeError<E> {
     Cancelled,
 }
 
+impl ServerInitializeError {
+    pub fn transport<T: Transport<RoleServer> + 'static>(
+        error: T::Error,
+        context: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        Self::TransportError {
+            error: DynamicTransportError::new::<T, _>(error),
+            context: context.into(),
+        }
+    }
+}
 pub type ClientSink = Peer<RoleServer>;
 
 impl<S: Service<RoleServer>> ServiceExt<RoleServer> for S {
@@ -74,7 +89,7 @@ impl<S: Service<RoleServer>> ServiceExt<RoleServer> for S {
         self,
         transport: T,
         ct: CancellationToken,
-    ) -> impl Future<Output = Result<RunningService<RoleServer, Self>, ServerInitializeError<E>>> + Send
+    ) -> impl Future<Output = Result<RunningService<RoleServer, Self>, ServerInitializeError>> + Send
     where
         T: IntoTransport<RoleServer, E, A>,
         E: std::error::Error + Send + Sync + 'static,
@@ -87,7 +102,7 @@ impl<S: Service<RoleServer>> ServiceExt<RoleServer> for S {
 pub async fn serve_server<S, T, E, A>(
     service: S,
     transport: T,
-) -> Result<RunningService<RoleServer, S>, ServerInitializeError<E>>
+) -> Result<RunningService<RoleServer, S>, ServerInitializeError>
 where
     S: Service<RoleServer>,
     T: IntoTransport<RoleServer, E, A>,
@@ -97,10 +112,10 @@ where
 }
 
 /// Helper function to get the next message from the stream
-async fn expect_next_message<T, E>(
+async fn expect_next_message<T>(
     transport: &mut T,
     context: &str,
-) -> Result<ClientJsonRpcMessage, ServerInitializeError<E>>
+) -> Result<ClientJsonRpcMessage, ServerInitializeError>
 where
     T: Transport<RoleServer>,
 {
@@ -111,10 +126,10 @@ where
 }
 
 /// Helper function to expect a request from the stream
-async fn expect_request<T, E>(
+async fn expect_request<T>(
     transport: &mut T,
     context: &str,
-) -> Result<(ClientRequest, RequestId), ServerInitializeError<E>>
+) -> Result<(ClientRequest, RequestId), ServerInitializeError>
 where
     T: Transport<RoleServer>,
 {
@@ -127,10 +142,10 @@ where
 }
 
 /// Helper function to expect a notification from the stream
-async fn expect_notification<T, E>(
+async fn expect_notification<T>(
     transport: &mut T,
     context: &str,
-) -> Result<ClientNotification, ServerInitializeError<E>>
+) -> Result<ClientNotification, ServerInitializeError>
 where
     T: Transport<RoleServer>,
 {
@@ -146,29 +161,28 @@ pub async fn serve_server_with_ct<S, T, E, A>(
     service: S,
     transport: T,
     ct: CancellationToken,
-) -> Result<RunningService<RoleServer, S>, ServerInitializeError<E>>
+) -> Result<RunningService<RoleServer, S>, ServerInitializeError>
 where
     S: Service<RoleServer>,
     T: IntoTransport<RoleServer, E, A>,
     E: std::error::Error + Send + Sync + 'static,
 {
     tokio::select! {
-        result = serve_server_with_ct_inner(service, transport, ct.clone()) => { result }
+        result = serve_server_with_ct_inner(service, transport.into_transport(), ct.clone()) => { result }
         _ = ct.cancelled() => {
             Err(ServerInitializeError::Cancelled)
         }
     }
 }
 
-async fn serve_server_with_ct_inner<S, T, E, A>(
+async fn serve_server_with_ct_inner<S, T>(
     service: S,
     transport: T,
     ct: CancellationToken,
-) -> Result<RunningService<RoleServer, S>, ServerInitializeError<E>>
+) -> Result<RunningService<RoleServer, S>, ServerInitializeError>
 where
     S: Service<RoleServer>,
-    T: IntoTransport<RoleServer, E, A>,
-    E: std::error::Error + Send + Sync + 'static,
+    T: Transport<RoleServer> + 'static,
 {
     let mut transport = transport.into_transport();
     let id_provider = <Arc<AtomicU32RequestIdProvider>>::default();
@@ -200,9 +214,8 @@ where
             transport
                 .send(ServerJsonRpcMessage::error(e.clone(), id))
                 .await
-                .map_err(|error| ServerInitializeError::TransportError {
-                    error,
-                    context: "sending error response".into(),
+                .map_err(|error| {
+                    ServerInitializeError::transport::<T>(error, "sending error response")
                 })?;
             return Err(ServerInitializeError::InitializeFailed(e));
         }
@@ -223,9 +236,8 @@ where
             id,
         ))
         .await
-        .map_err(|error| ServerInitializeError::TransportError {
-            error,
-            context: "sending initialize response".into(),
+        .map_err(|error| {
+            ServerInitializeError::transport::<T>(error, "sending initialize response")
         })?;
 
     // Wait for initialize notification
