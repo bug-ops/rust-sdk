@@ -310,11 +310,13 @@ mod test {
         let builder = <ServerCapabilitiesBuilder>::default()
             .enable_logging()
             .enable_experimental()
+            .enable_completions()
             .enable_prompts()
             .enable_resources()
             .enable_tools()
             .enable_tool_list_changed();
         assert_eq!(builder.logging, Some(JsonObject::default()));
+        assert_eq!(builder.completions, Some(JsonObject::default()));
         assert_eq!(builder.prompts, Some(PromptsCapability::default()));
         assert_eq!(builder.resources, Some(ResourcesCapability::default()));
         assert_eq!(
