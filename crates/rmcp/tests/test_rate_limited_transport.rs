@@ -4,7 +4,7 @@ use rmcp::{
     model::{ClientRequest, JsonRpcMessage, JsonRpcRequest, RequestId, RequestNoParam, PingRequestMethod},
     service::{RoleClient, RxJsonRpcMessage, TxJsonRpcMessage},
     transport::{
-        rate_limited::{MessageType, RateLimitConfig, RateLimitedTransport, TokenBucketConfig},
+        rate_limited::{RateLimitConfig, RateLimitedTransport, TokenBucketConfig},
         Transport,
     },
 };
@@ -23,6 +23,7 @@ impl MockTransport {
         }
     }
 
+    #[allow(dead_code)]
     async fn get_send_count(&self) -> usize {
         *self.send_count.lock().await
     }
@@ -43,12 +44,12 @@ impl Transport<RoleClient> for MockTransport {
         }
     }
 
-    fn receive(&mut self) -> impl std::future::Future<Output = Option<RxJsonRpcMessage<RoleClient>>> + Send {
-        async { None }
+    async fn receive(&mut self) -> Option<RxJsonRpcMessage<RoleClient>> {
+        None
     }
 
-    fn close(&mut self) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
-        async { Ok(()) }
+    async fn close(&mut self) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 
@@ -73,46 +74,14 @@ async fn test_rate_limiting_basic() {
     assert!(result.is_ok());
 }
 
-#[tokio::test]
-async fn test_message_classification() {
-    use rmcp::transport::rate_limited::classify_method;
-
-    // Test progress notification classification
-    assert_eq!(
-        classify_method("notifications/progress"),
-        MessageType::ProgressNotification
-    );
-
-    // Test logging message classification  
-    assert_eq!(
-        classify_method("logging/message"),
-        MessageType::LoggingMessage
-    );
-
-    // Test sampling request classification
-    assert_eq!(
-        classify_method("sampling/createMessage"),
-        MessageType::SamplingRequest
-    );
-
-    // Test tool call classification
-    assert_eq!(
-        classify_method("tools/call"),
-        MessageType::ToolCall
-    );
-
-    // Test unknown method classification
-    assert_eq!(
-        classify_method("unknown/method"),
-        MessageType::Other
-    );
-}
+// Message classification tests removed since we now use compile-time enum matching
+// instead of runtime string-based classification
 
 #[tokio::test]
 async fn test_token_bucket_refill() {
     use rmcp::transport::rate_limited::TokenBucket;
 
-    let config = TokenBucketConfig::new(10, 5); // 10 tokens per second, burst 5
+    let config = TokenBucketConfig::new(10, 5).unwrap(); // 10 tokens per second, burst 5
     let mut bucket = TokenBucket::new(config);
 
     // Should start with full capacity
@@ -128,4 +97,67 @@ async fn test_token_bucket_refill() {
     // Wait a bit and try again - tokens should refill
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
     assert!(bucket.try_consume());
+}
+
+#[tokio::test]
+async fn test_overflow_protection() {
+    use rmcp::transport::rate_limited::TokenBucket;
+    use std::time::{Duration, Instant};
+    
+    let config = TokenBucketConfig::new(10, 5).unwrap(); // 10 tokens per second, burst 5
+    let mut bucket = TokenBucket::new(config);
+    
+    // Simulate extreme time jump (should be protected)
+    bucket.set_last_refill(Instant::now() - Duration::from_secs(365 * 24 * 3600)); // 1 year ago
+    
+    // After refill, tokens should be capped at burst capacity
+    bucket.force_refill();
+    
+    // Should be limited to burst capacity, not overflow
+    assert!(bucket.current_tokens() <= 5.0);
+    assert!(bucket.current_tokens() >= 0.0);
+    
+    // Should allow burst capacity number of tokens
+    for _ in 0..5 {
+        assert!(bucket.try_consume());
+    }
+    
+    // Should be exhausted after burst
+    assert!(!bucket.try_consume());
+}
+
+#[test]
+fn test_config_validation() {
+    use rmcp::transport::rate_limited::{TokenBucketConfig, ConfigError};
+    
+    // Valid configurations should work
+    assert!(TokenBucketConfig::new(10, 5).is_ok());
+    assert!(TokenBucketConfig::new(1, 1).is_ok());
+    assert!(TokenBucketConfig::new(100_000, 10_000).is_ok());
+    
+    // Invalid rate limits
+    assert!(matches!(
+        TokenBucketConfig::new(0, 5),
+        Err(ConfigError::InvalidRateLimit(0))
+    ));
+    assert!(matches!(
+        TokenBucketConfig::new(100_001, 5),
+        Err(ConfigError::InvalidRateLimit(100_001))
+    ));
+    
+    // Invalid burst capacities
+    assert!(matches!(
+        TokenBucketConfig::new(10, 0),
+        Err(ConfigError::InvalidBurstCapacity(0))
+    ));
+    assert!(matches!(
+        TokenBucketConfig::new(10, 10_001),
+        Err(ConfigError::InvalidBurstCapacity(10_001))
+    ));
+    
+    // Unreasonable burst configuration
+    assert!(matches!(
+        TokenBucketConfig::new(10, 601), // 601 > 10 * 60
+        Err(ConfigError::UnreasonableBurst { rate: 10, burst: 601 })
+    ));
 }
