@@ -136,6 +136,13 @@ pub use streamable_http_client::StreamableHttpClientTransport;
 /// Common use codes
 pub mod common;
 
+#[cfg(feature = "transport-rate-limited")]
+#[cfg_attr(docsrs, doc(cfg(feature = "transport-rate-limited")))]
+pub mod rate_limited;
+#[cfg(feature = "transport-rate-limited")]
+#[cfg_attr(docsrs, doc(cfg(feature = "transport-rate-limited")))]
+pub use rate_limited::{RateLimitConfig, RateLimitedTransport, TokenBucketConfig};
+
 pub trait Transport<R>: Send
 where
     R: ServiceRole,

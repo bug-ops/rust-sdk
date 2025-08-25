@@ -139,6 +139,9 @@ tower = ["dep:tower-service"]
 auth = ["dep:oauth2", "__reqwest", "dep:url"]
 schemars = ["dep:schemars"]
 
+# Rate limiting support
+transport-rate-limited = []
+
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 schemars = { version = "1.0", features = ["chrono04"] }
