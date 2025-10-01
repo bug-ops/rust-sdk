@@ -1,12 +1,12 @@
 //! Simple MCP Server with Elicitation
 //!
-//! Demonstrates user name collection via elicitation
+//! Demonstrates user name collection via elicitation using low-level typed schema builder
 
 use std::sync::Arc;
 
 use anyhow::Result;
 use rmcp::{
-    ErrorData as McpError, ServerHandler, ServiceExt, elicit_safe,
+    ErrorData as McpError, ServerHandler, ServiceExt,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::*,
     schemars::JsonSchema,
@@ -14,20 +14,9 @@ use rmcp::{
     tool, tool_handler, tool_router,
     transport::stdio,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tokio::sync::Mutex;
 use tracing_subscriber::{self, EnvFilter};
-
-/// User information request
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[schemars(description = "User information")]
-pub struct UserInfo {
-    #[schemars(description = "User's name")]
-    pub name: String,
-}
-
-// Mark as safe for elicitation
-elicit_safe!(UserInfo);
 
 /// Simple tool request
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -71,19 +60,41 @@ impl ElicitationServer {
         let user_name = if let Some(name) = current_name {
             name
         } else {
-            // Request user name via elicitation
-            match context
-                .peer
-                .elicit::<UserInfo>("Please provide your name".to_string())
-                .await
-            {
-                Ok(Some(user_info)) => {
-                    let name = user_info.name.clone();
-                    *self.user_name.lock().await = Some(name.clone());
-                    name
+            // Request user name via typed elicitation schema
+            let schema = ElicitationSchema::builder()
+                .string(
+                    "name",
+                    StringPropertySchema::new()
+                        .with_description("User's name")
+                        .with_length_range(1, 100),
+                )
+                .required("name")
+                .build();
+
+            let request_param = CreateElicitationRequestParam {
+                message: "Please provide your name".to_string(),
+                requested_schema: schema.to_json_object(),
+            };
+
+            match context.peer.create_elicitation(request_param).await {
+                Ok(result) if result.action == ElicitationAction::Accept => {
+                    if let Some(content) = result.content {
+                        if let Some(name_value) = content.get("name") {
+                            if let Some(name) = name_value.as_str() {
+                                let name = name.to_string();
+                                *self.user_name.lock().await = Some(name.clone());
+                                name
+                            } else {
+                                "Guest".to_string()
+                            }
+                        } else {
+                            "Guest".to_string()
+                        }
+                    } else {
+                        "Guest".to_string()
+                    }
                 }
-                Ok(None) => "Guest".to_string(), // Never happen if client checks schema
-                Err(_) => "Unknown".to_string(),
+                _ => "Unknown".to_string(),
             }
         };
 
